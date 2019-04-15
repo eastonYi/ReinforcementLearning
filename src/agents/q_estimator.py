@@ -15,7 +15,7 @@ class Q_Estimator(Agent):
         self.epsilon = epsilon
         super().__init__(size)
 
-    def forward(self):
+    def move(self):
         """
         from state to action
         """

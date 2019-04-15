@@ -20,43 +20,37 @@ class Walker(Agent):
         self.size_window = size_window
         self.size_embedding = size_action+1
         self.build_inputs()
-        self.q_estimation = self.build_NN()
+        self.policy = tf.nn.softmax(self.build_NN())
 
-    def forward(self, state):
+    def move(self, state):
         """
         from state to action
         state: [1,2,3]
         """
         # action
-        dict_feed = {self.pl_state: np.array([state], dtype=np.int32)}
-        q_estimation = self.sess.run(self.q_estimation, feed_dict=dict_feed)[0]
+        policy = self.eval(state)
+        action = np.argmax(policy)
 
-        state_str = ''.join(map(str, state))
-        if self.UCB_param:
-            UCB_estimation = q_estimation + \
-                self.UCB_param * np.sqrt(np.log(np.sum(self.dict_actionCount[state_str])+1.1)/(self.dict_actionCount[state_str]+1e-10))
-            action = np.argmax(UCB_estimation)
-        else:
-            if random.random() < self.epsilon:
-                action = np.argmax(q_estimation)
-            else:
-                action = random.randint(0, self.size_action-1)
+        self.dict_actionCount[state.idx][action] += 1
 
-        self.dict_actionCount[state_str][action] += 1
+        return action
 
-        return action, q_estimation, UCB_estimation
+    def eval(self, state):
+        dict_feed = {self.pl_state: np.array([state.data], dtype=np.int32)}
+        policy = self.sess.run(self.policy, feed_dict=dict_feed)[0]
+
+        return policy
 
     def build_inputs(self):
         self.pl_state = tf.placeholder(shape=[None, None], dtype=tf.int32)
-        self.pl_reward = tf.placeholder(shape=[None], dtype=tf.float32)
-        self.pl_action = tf.placeholder(shape=[None], dtype=tf.int32)
+        self.pl_pi = tf.placeholder(shape=[None, None], dtype=tf.float32)
 
     def build_NN(self, reuse=False):
         '''
         self.pl_state: [batch, num]
         x: [batch, num, size]
 
-        q_estimation: [batch, size]
+        policy: [batch, size]
         '''
         batch_size = tf.shape(self.pl_state)[0]
         x = tf.one_hot(self.pl_state, self.size_embedding, dtype=tf.float32)
@@ -72,22 +66,19 @@ class Walker(Agent):
                     use_bias=True,
                     name='dense_{}'.format(i))
 
-            q_estimation = tf.layers.dense(
+            logit = tf.layers.dense(
                 inputs=x,
                 units=self.size_action,
                 activation=None,
                 use_bias=False,
                 name='fully_connected')
 
-        return q_estimation
+        return logit
 
     def compute_loss(self):
 
-        q_estimation = self.build_NN(reuse=True)
-
-        size_batch = tf.shape(q_estimation)[0]
-        predicts = tf.gather_nd(q_estimation, tf.stack([tf.range(size_batch), self.pl_action], -1))
-
-        loss = tf.pow(predicts - self.pl_reward, 2)
+        logit = self.build_NN(reuse=True)
+        loss = tf.nn.softmax_cross_entropy_with_logits_v2(
+            logits=logit, labels=self.pl_pi)
 
         return loss

@@ -17,25 +17,26 @@ class Sample_Collector(object):
         return len(self.pool)
 
     def collect(self, pack):
-        s, a, r, q, u = pack
+        s, a, r, pi, q = pack
         sample = {}
         sample['state'] = s
         sample['action'] = a
         sample['reward'] = r
+        sample['pi'] = pi
         sample['Q'] = q
-        sample['UCB'] = u
+        # sample['UCB'] = u
 
         self.pool.append(sample)
         if len(self) > self.capacity:
-            del self.pool[0]
+            del self.pool[random.randint(0, len(self)-1)]
 
     def get_batch(self, batch_size):
         samples = [random.choice(self.pool) for _ in range(batch_size)]
-        state = np.array([sample['state'] for sample in samples])
-        action = np.array([sample['action'] for sample in samples])
-        reward = np.array([sample['reward'] for sample in samples])
 
-        return state, action, reward
+        state = np.array([sample['state'].data for sample in samples])
+        pi = np.array([sample['pi'] for sample in samples])
+
+        return state, pi
 
 
 class Memory_Collector(object):
